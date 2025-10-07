@@ -6,7 +6,6 @@ import { TradingStrategies } from '@/types/index';
 
 const fetcher = (url: string) => fetch(url).then(res => res.json());
 
-// Define precise types
 interface PriceData {
   current: number;
   change: number;
@@ -99,39 +98,45 @@ export default function CoinsPage() {
   }, []);
 
   const fetchRealTimePrices = useCallback(async () => {
-    if (!symbols) return;
+    if (!symbols || symbols.length === 0) return;
 
     try {
-      const limitedSymbols = symbols.slice(0, 50);
-      const symbolList = JSON.stringify(limitedSymbols);
-      const response = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(symbolList)}`);
-      if (!response.ok) {
-        console.error('Binance API error:', response.status, response.statusText);
-        return;
+      const allPrices: Record<string, PriceUpdate> = {};
+      const batchSize = 100;
+
+      // Process symbols in batches of 100
+      for (let i = 0; i < symbols.length; i += batchSize) {
+        const batch = symbols.slice(i, i + batchSize);
+        const symbolList = JSON.stringify(batch);
+        const response = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(symbolList)}`);
+        
+        if (!response.ok) {
+          console.warn(`Binance batch ${i / batchSize + 1} failed:`, response.status);
+          continue;
+        }
+
+        const data: Array<{
+          symbol: string;
+          lastPrice: string;
+          priceChangePercent: string;
+        }> = await response.json();
+
+        const validPrices: PriceUpdate[] = data
+          .filter(item => item && typeof item.lastPrice === 'string' && typeof item.priceChangePercent === 'string')
+          .map(item => {
+            const symbol = item.symbol.toUpperCase();
+            const price = parseFloat(item.lastPrice);
+            const change = parseFloat(item.priceChangePercent);
+            return { symbol, price, change };
+          })
+          .filter(price => !isNaN(price.price) && !isNaN(price.change));
+
+        validPrices.forEach(price => {
+          allPrices[price.symbol] = price;
+        });
       }
 
-      const data: Array<{
-        symbol: string;
-        lastPrice: string;
-        priceChangePercent: string;
-      }> = await response.json();
-
-      const validPrices: PriceUpdate[] = data
-        .filter(item => item && typeof item.lastPrice === 'string')
-        .map(item => ({
-          symbol: item.symbol,
-          price: parseFloat(item.lastPrice),
-          change: parseFloat(item.priceChangePercent)
-        }))
-        .filter(price => !isNaN(price.price) && !isNaN(price.change));
-
-      setRealTimePrices(prev => {
-        const newPrices = { ...prev };
-        validPrices.forEach(price => {
-          newPrices[price.symbol] = price;
-        });
-        return newPrices;
-      });
+      setRealTimePrices(allPrices);
     } catch (error) {
       console.error('Failed to fetch real-time prices:', error);
     }
@@ -139,7 +144,6 @@ export default function CoinsPage() {
 
   const filteredCoins = useMemo(() => {
     if (!symbols) return [];
-    
     let filtered = symbols.filter((symbol: string) => {
       if (activeTab === 'ALL') return true;
       const signal = coinSignals[symbol] || { action: 'HOLD', confidence: 0 };
@@ -147,14 +151,10 @@ export default function CoinsPage() {
       return classification === activeTab;
     });
 
-    // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.trim().toUpperCase();
-      filtered = filtered.filter(symbol => 
-        symbol.includes(query)
-      );
+      filtered = filtered.filter(symbol => symbol.includes(query));
     }
-
     return filtered;
   }, [symbols, activeTab, coinSignals, searchQuery]);
 
@@ -166,33 +166,13 @@ export default function CoinsPage() {
 
   useEffect(() => {
     if (!autoRefresh || !symbols) return;
-
     fetchRealTimePrices();
     const interval = setInterval(fetchRealTimePrices, 1000);
     return () => clearInterval(interval);
   }, [autoRefresh, symbols, fetchRealTimePrices]);
 
   useEffect(() => {
-    if (selectedCoin && realTimePrices[selectedCoin.symbol]) {
-      const rt = realTimePrices[selectedCoin.symbol];
-      setSelectedCoin(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          priceData: {
-            ...prev.priceData,
-            current: rt.price,
-            change: rt.change
-          },
-          lastUpdated: new Date()
-        };
-      });
-    }
-  }, [realTimePrices, selectedCoin?.symbol, selectedCoin]); // ✅ Added `selectedCoin` to deps
-
-  useEffect(() => {
     if (!symbols || paginatedCoins.length === 0) return;
-
     paginatedCoins.forEach((symbol: string) => {
       if (!coinSignals[symbol]) {
         computeSignalForSymbol(symbol).then(signal => {
@@ -202,7 +182,6 @@ export default function CoinsPage() {
     });
   }, [paginatedCoins, symbols, coinSignals, computeSignalForSymbol]);
 
-  // Reset to first page when search query changes
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, activeTab]);
@@ -272,7 +251,6 @@ export default function CoinsPage() {
         }
       }));
 
-      // Scroll to analysis
       setTimeout(() => {
         analysisRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, 100);
@@ -304,7 +282,6 @@ export default function CoinsPage() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
-      {/* Header */}
       <header className="border-b border-gray-800">
         <div className="container mx-auto px-4 py-6">
           <h1 className="text-3xl font-bold text-center">PerfectBot</h1>
@@ -315,9 +292,7 @@ export default function CoinsPage() {
       </header>
 
       <div className="container mx-auto px-4 py-8">
-        {/* Auto-refresh Controls */}
         <div className="flex justify-between items-center mb-6">
-          {/* Search Bar */}
           <div className="relative w-full max-w-md">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -361,13 +336,12 @@ export default function CoinsPage() {
           </div>
         </div>
 
-        {/* Search Results Info */}
         {searchQuery && (
           <div className="mb-4 p-3 bg-blue-900/20 border border-blue-700 rounded-lg">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <span className="text-blue-400">Search results for:</span>
-                <span className="font-semibold text-white">{`"${searchQuery}"`}</span> {/* ✅ Escaped quotes */}
+                <span className="font-semibold text-white">{`"${searchQuery}"`}</span>
                 <span className="text-gray-400">({filteredCoins.length} coins found)</span>
               </div>
               <button
@@ -380,7 +354,6 @@ export default function CoinsPage() {
           </div>
         )}
 
-        {/* Signal Tabs */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8">
           {(['ALL', 'STRONG_BUY', 'BUY', 'SELL', 'STRONG_SELL'] as const).map((tab) => (
             <button
@@ -417,7 +390,6 @@ export default function CoinsPage() {
           ))}
         </div>
 
-        {/* Coins Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
           {paginatedCoins.length > 0 ? (
             paginatedCoins.map((symbol: string) => {
@@ -425,7 +397,6 @@ export default function CoinsPage() {
               const classification = classifySignal(signal.confidence, signal.action);
               const realTimePrice = realTimePrices[symbol];
               
-              // Map internal classification to display text
               const displayAction = 
                 classification === 'STRONG_BUY' ? 'STRONG BUY' :
                 classification === 'STRONG_SELL' ? 'STRONG SELL' :
@@ -502,7 +473,6 @@ export default function CoinsPage() {
           )}
         </div>
 
-        {/* Pagination */}
         {totalPages > 1 && (
           <div className="flex justify-center space-x-2 mb-12">
             {[...Array(totalPages)].map((_, i) => (
@@ -521,148 +491,151 @@ export default function CoinsPage() {
           </div>
         )}
 
-        {/* Analysis Section - Below Coins */}
         <div ref={analysisRef} className="mt-8">
           {selectedCoin ? (
-            <div className="space-y-6 animate-fadeIn">
-              {/* Price Overview Card */}
-              <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h2 className="text-3xl font-bold">
-                      {selectedCoin.symbol} Analysis
-                    </h2>
-                    <p className="text-gray-400 text-sm mt-1">
-                      Last updated: {selectedCoin.lastUpdated.toLocaleTimeString()}
-                    </p>
+            (() => {
+              const livePriceData = realTimePrices[selectedCoin.symbol]
+                ? {
+                    ...selectedCoin.priceData,
+                    current: realTimePrices[selectedCoin.symbol].price,
+                    change: realTimePrices[selectedCoin.symbol].change,
+                  }
+                : selectedCoin.priceData;
+
+              return (
+                <div className="space-y-6 animate-fadeIn">
+                  <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
+                    <div className="flex items-center justify-between mb-6">
+                      <div>
+                        <h2 className="text-3xl font-bold">{selectedCoin.symbol} Analysis</h2>
+                        <p className="text-gray-400 text-sm mt-1">
+                          Last updated: {new Date().toLocaleTimeString()}
+                        </p>
+                      </div>
+                      <span className={`px-6 py-3 rounded-xl font-bold text-lg ${
+                        selectedCoin.consensus.action === 'BUY' 
+                          ? 'bg-green-500 text-white' 
+                          : selectedCoin.consensus.action === 'SELL' 
+                          ? 'bg-red-500 text-white' 
+                          : 'bg-yellow-500 text-black'
+                      }`}>
+                        {selectedCoin.consensus.action}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div className="text-center p-4 bg-gray-700/50 rounded-lg">
+                        <div className="text-2xl font-bold text-white">${livePriceData.current.toFixed(4)}</div>
+                        <div className={`text-sm font-semibold ${livePriceData.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {livePriceData.change >= 0 ? '+' : ''}{Math.abs(livePriceData.change).toFixed(2)}%
+                        </div>
+                      </div>
+                      <div className="text-center p-4 bg-gray-700/50 rounded-lg">
+                        <div className="text-lg font-semibold text-gray-300">24h High</div>
+                        <div className="text-green-400 font-bold">${livePriceData.high.toFixed(4)}</div>
+                      </div>
+                      <div className="text-center p-4 bg-gray-700/50 rounded-lg">
+                        <div className="text-lg font-semibold text-gray-300">24h Low</div>
+                        <div className="text-red-400 font-bold">${livePriceData.low.toFixed(4)}</div>
+                      </div>
+                      <div className="text-center p-4 bg-gray-700/50 rounded-lg">
+                        <div className="text-lg font-semibold text-gray-300">Strategies</div>
+                        <div className="text-white font-bold">{selectedCoin.signals.length}/58 Active</div>
+                      </div>
+                    </div>
                   </div>
-                  <span className={`px-6 py-3 rounded-xl font-bold text-lg ${
+
+                  <div className={`rounded-xl p-6 border-l-4 ${
                     selectedCoin.consensus.action === 'BUY' 
-                      ? 'bg-green-500 text-white' 
+                      ? 'bg-green-900/20 border-green-500' 
                       : selectedCoin.consensus.action === 'SELL' 
-                      ? 'bg-red-500 text-white' 
-                      : 'bg-yellow-500 text-black'
+                      ? 'bg-red-900/20 border-red-500' 
+                      : 'bg-yellow-900/20 border-yellow-500'
                   }`}>
-                    {selectedCoin.consensus.action}
-                  </span>
-                </div>
-                
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="text-center p-4 bg-gray-700/50 rounded-lg">
-                    <div className="text-2xl font-bold text-white">${selectedCoin.priceData.current.toFixed(4)}</div>
-                    <div className={`text-sm font-semibold ${selectedCoin.priceData.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                      {selectedCoin.priceData.change >= 0 ? '+' : ''}{Math.abs(selectedCoin.priceData.change).toFixed(2)}%
+                    <h3 className="text-xl font-bold mb-4">Consensus Signal</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                      <div className="text-center p-3 bg-gray-700/50 rounded-lg">
+                        <div className="text-sm text-gray-400 mb-1">Action</div>
+                        <div className={`text-lg font-bold ${
+                          selectedCoin.consensus.action === 'BUY' ? 'text-green-400' :
+                          selectedCoin.consensus.action === 'SELL' ? 'text-red-400' :
+                          'text-yellow-400'
+                        }`}>
+                          {selectedCoin.consensus.action}
+                        </div>
+                      </div>
+                      <div className="text-center p-3 bg-gray-700/50 rounded-lg">
+                        <div className="text-sm text-gray-400 mb-1">Confidence</div>
+                        <div className="text-lg font-bold text-blue-400">
+                          {(selectedCoin.consensus.confidence * 100).toFixed(1)}%
+                        </div>
+                      </div>
+                      <div className="text-center p-3 bg-gray-700/50 rounded-lg">
+                        <div className="text-sm text-gray-400 mb-1">Duration</div>
+                        <div className="text-lg font-bold text-purple-400">{selectedCoin.consensus.duration}</div>
+                      </div>
+                      <div className="text-center p-3 bg-gray-700/50 rounded-lg">
+                        <div className="text-sm text-gray-400 mb-1">Leverage</div>
+                        <div className="text-lg font-bold text-orange-400">{selectedCoin.consensus.leverage}x</div>
+                      </div>
+                    </div>
+                    <div className="mt-4">
+                      <div className="text-sm text-gray-400 mb-2">Analysis Reason</div>
+                      <p className="text-gray-200 leading-relaxed">{selectedCoin.consensus.reason}</p>
                     </div>
                   </div>
-                  <div className="text-center p-4 bg-gray-700/50 rounded-lg">
-                    <div className="text-lg font-semibold text-gray-300">24h High</div>
-                    <div className="text-green-400 font-bold">${selectedCoin.priceData.high.toFixed(4)}</div>
-                  </div>
-                  <div className="text-center p-4 bg-gray-700/50 rounded-lg">
-                    <div className="text-lg font-semibold text-gray-300">24h Low</div>
-                    <div className="text-red-400 font-bold">${selectedCoin.priceData.low.toFixed(4)}</div>
-                  </div>
-                  <div className="text-center p-4 bg-gray-700/50 rounded-lg">
-                    <div className="text-lg font-semibold text-gray-300">Strategies</div>
-                    <div className="text-white font-bold">{selectedCoin.signals.length}/58 Active</div>
-                  </div>
-                </div>
-              </div>
 
-              {/* Consensus Signal Card */}
-              <div className={`rounded-xl p-6 border-l-4 ${
-                selectedCoin.consensus.action === 'BUY' 
-                  ? 'bg-green-900/20 border-green-500' 
-                  : selectedCoin.consensus.action === 'SELL' 
-                  ? 'bg-red-900/20 border-red-500' 
-                  : 'bg-yellow-900/20 border-yellow-500'
-              }`}>
-                <h3 className="text-xl font-bold mb-4">
-                  Consensus Signal
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                  <div className="text-center p-3 bg-gray-700/50 rounded-lg">
-                    <div className="text-sm text-gray-400 mb-1">Action</div>
-                    <div className={`text-lg font-bold ${
-                      selectedCoin.consensus.action === 'BUY' ? 'text-green-400' :
-                      selectedCoin.consensus.action === 'SELL' ? 'text-red-400' :
-                      'text-yellow-400'
-                    }`}>
-                      {selectedCoin.consensus.action}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-green-900/20 border border-green-500 rounded-xl p-5">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="text-lg font-semibold text-green-400">BUY Signals</h4>
+                        <span className="bg-green-500 text-white px-3 py-1 rounded-full font-bold">
+                          {selectedCoin.strategyStats.buy.count}
+                        </span>
+                      </div>
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {selectedCoin.strategyStats.buy.strategies.map((strategy, idx) => (
+                          <div key={idx} className="bg-green-500/20 p-3 rounded-lg text-sm">
+                            <div className="text-green-300 font-medium">{strategy}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="bg-red-900/20 border border-red-500 rounded-xl p-5">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="text-lg font-semibold text-red-400">SELL Signals</h4>
+                        <span className="bg-red-500 text-white px-3 py-1 rounded-full font-bold">
+                          {selectedCoin.strategyStats.sell.count}
+                        </span>
+                      </div>
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {selectedCoin.strategyStats.sell.strategies.map((strategy, idx) => (
+                          <div key={idx} className="bg-red-500/20 p-3 rounded-lg text-sm">
+                            <div className="text-red-300 font-medium">{strategy}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="bg-yellow-900/20 border border-yellow-500 rounded-xl p-5">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="text-lg font-semibold text-yellow-400">HOLD Signals</h4>
+                        <span className="bg-yellow-500 text-black px-3 py-1 rounded-full font-bold">
+                          {selectedCoin.strategyStats.hold.count}
+                        </span>
+                      </div>
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {selectedCoin.strategyStats.hold.strategies.map((strategy, idx) => (
+                          <div key={idx} className="bg-yellow-500/20 p-3 rounded-lg text-sm">
+                            <div className="text-yellow-300 font-medium">{strategy}</div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                  <div className="text-center p-3 bg-gray-700/50 rounded-lg">
-                    <div className="text-sm text-gray-400 mb-1">Confidence</div>
-                    <div className="text-lg font-bold text-blue-400">
-                      {(selectedCoin.consensus.confidence * 100).toFixed(1)}%
-                    </div>
-                  </div>
-                  <div className="text-center p-3 bg-gray-700/50 rounded-lg">
-                    <div className="text-sm text-gray-400 mb-1">Duration</div>
-                    <div className="text-lg font-bold text-purple-400">{selectedCoin.consensus.duration}</div>
-                  </div>
-                  <div className="text-center p-3 bg-gray-700/50 rounded-lg">
-                    <div className="text-sm text-gray-400 mb-1">Leverage</div>
-                    <div className="text-lg font-bold text-orange-400">{selectedCoin.consensus.leverage}x</div>
-                  </div>
                 </div>
-                <div className="mt-4">
-                  <div className="text-sm text-gray-400 mb-2">Analysis Reason</div>
-                  <p className="text-gray-200 leading-relaxed">{selectedCoin.consensus.reason}</p>
-                </div>
-              </div>
-
-              {/* Strategy Breakdown */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-green-900/20 border border-green-500 rounded-xl p-5">
-                  <div className="flex items-center justify-between mb-4">
-                    <h4 className="text-lg font-semibold text-green-400">BUY Signals</h4>
-                    <span className="bg-green-500 text-white px-3 py-1 rounded-full font-bold">
-                      {selectedCoin.strategyStats.buy.count}
-                    </span>
-                  </div>
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {selectedCoin.strategyStats.buy.strategies.map((strategy, idx) => (
-                      <div key={idx} className="bg-green-500/20 p-3 rounded-lg text-sm">
-                        <div className="text-green-300 font-medium">{strategy}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="bg-red-900/20 border border-red-500 rounded-xl p-5">
-                  <div className="flex items-center justify-between mb-4">
-                    <h4 className="text-lg font-semibold text-red-400">SELL Signals</h4>
-                    <span className="bg-red-500 text-white px-3 py-1 rounded-full font-bold">
-                      {selectedCoin.strategyStats.sell.count}
-                    </span>
-                  </div>
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {selectedCoin.strategyStats.sell.strategies.map((strategy, idx) => (
-                      <div key={idx} className="bg-red-500/20 p-3 rounded-lg text-sm">
-                        <div className="text-red-300 font-medium">{strategy}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="bg-yellow-900/20 border border-yellow-500 rounded-xl p-5">
-                  <div className="flex items-center justify-between mb-4">
-                    <h4 className="text-lg font-semibold text-yellow-400">HOLD Signals</h4>
-                    <span className="bg-yellow-500 text-black px-3 py-1 rounded-full font-bold">
-                      {selectedCoin.strategyStats.hold.count}
-                    </span>
-                  </div>
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {selectedCoin.strategyStats.hold.strategies.map((strategy, idx) => (
-                      <div key={idx} className="bg-yellow-500/20 p-3 rounded-lg text-sm">
-                        <div className="text-yellow-300 font-medium">{strategy}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
+              );
+            })()
           ) : (
             <div className="text-center py-12 text-gray-500">
               <p>Select a coin above to view detailed analysis</p>
