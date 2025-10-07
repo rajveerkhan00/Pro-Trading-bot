@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
-    // Public Binance endpoint — no API key needed
+    // ✅ NO TRAILING SPACE in the URL
     const res = await fetch('https://api.binance.com/api/v3/exchangeInfo', {
       next: { revalidate: 300 }, // cache for 5 minutes
     });
@@ -12,12 +12,12 @@ export async function GET() {
     const data = await res.json();
     // Filter active USDT pairs
     const usdtSymbols = data.symbols
-      .filter((s: { status: string; quoteAsset: string; symbol: string }) => 
+      .filter((s: any) => 
         s.status === 'TRADING' && 
         s.quoteAsset === 'USDT' &&
         !s.symbol.includes('_') // exclude leveraged tokens
       )
-      .map((s: { symbol: string }) => s.symbol)
+      .map((s: any) => s.symbol)
       .sort()
       .slice(0, 850);
     return NextResponse.json(usdtSymbols);

@@ -66,7 +66,9 @@ export default function CoinsPage() {
 
   const analysisRef = useRef<HTMLDivElement>(null);
 
-  const { data: symbols, error } = useSWR<string[]>('/api/binance-symbols', fetcher);
+  // ✅ Correct SWR destructuring
+  const { data: rawSymbols, error } = useSWR('/api/binance-symbols', fetcher);
+  const symbols = Array.isArray(rawSymbols) ? rawSymbols : null;
 
   const classifySignal = (confidence: number, action: string) => {
     if (action === 'HOLD') return 'HOLD';
@@ -104,7 +106,6 @@ export default function CoinsPage() {
       const allPrices: Record<string, PriceUpdate> = {};
       const batchSize = 100;
 
-      // Process symbols in batches of 100
       for (let i = 0; i < symbols.length; i += batchSize) {
         const batch = symbols.slice(i, i + batchSize);
         const symbolList = JSON.stringify(batch);
@@ -115,6 +116,7 @@ export default function CoinsPage() {
           continue;
         }
 
+        // ✅ Fixed: proper variable name and type annotation
         const data: Array<{
           symbol: string;
           lastPrice: string;

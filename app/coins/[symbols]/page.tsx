@@ -5,7 +5,6 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { TradingStrategies } from '@/types/index';
 
-// Define types
 interface PriceData {
   current: number;
   change: number;
@@ -31,7 +30,7 @@ interface ConsensusSignal {
 export default function CoinPage() {
   const params = useParams();
   const symbol = params.symbol as string;
-
+  
   const [isLoading, setIsLoading] = useState(true);
   const [signals, setSignals] = useState<Signal[]>([]);
   const [consensus, setConsensus] = useState<ConsensusSignal | null>(null);
@@ -40,7 +39,6 @@ export default function CoinPage() {
   useEffect(() => {
     const init = async () => {
       try {
-        // Fetch klines from Binance
         const res = await fetch(
           `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1h&limit=100`
         );
@@ -50,7 +48,6 @@ export default function CoinPage() {
         const high = klines.map(k => parseFloat(k[2]));
         const low = klines.map(k => parseFloat(k[3]));
 
-        // Get current price data
         const currentPrice = prices[prices.length - 1];
         const priceChange = ((currentPrice - prices[prices.length - 2]) / prices[prices.length - 2]) * 100;
 
@@ -61,14 +58,13 @@ export default function CoinPage() {
           low: Math.min(...low)
         });
 
-        // Run all 58 strategies
         const allSignals = TradingStrategies.getAllSignals(prices, high, low, symbol);
         const consensusSignal = TradingStrategies.getConsensusSignal(prices, high, low, symbol);
 
         setSignals(allSignals);
         setConsensus(consensusSignal);
       } catch (err) {
-        console.error('Failed to load coin data:', err);
+        console.error('Failed to load coin ', err);
       } finally {
         setIsLoading(false);
       }
@@ -87,19 +83,16 @@ export default function CoinPage() {
     );
   }
 
-  // Categorize strategies
   const buyStrategies = signals.filter(s => s.action === 'BUY');
   const sellStrategies = signals.filter(s => s.action === 'SELL');
   const holdStrategies = signals.filter(s => s.action === 'HOLD');
 
-  // Removed unused `holdCount`
+  // ✅ Removed unused `holdCount`
   const getActionLevel = (buyCount: number, sellCount: number) => {
     const totalActive = buyCount + sellCount;
     if (totalActive === 0) return 'HOLD';
-
     const buyRatio = buyCount / totalActive;
     const sellRatio = sellCount / totalActive;
-
     if (buyRatio >= 0.7) return 'STRONG BUY';
     if (buyRatio >= 0.6) return 'BUY';
     if (sellRatio >= 0.7) return 'STRONG SELL';
@@ -111,7 +104,6 @@ export default function CoinPage() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
-      {/* Header */}
       <header className="border-b border-gray-800">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
@@ -135,7 +127,6 @@ export default function CoinPage() {
       </header>
 
       <div className="container mx-auto px-4 py-6">
-        {/* Price Overview */}
         {priceData && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div className="bg-gray-800 rounded-lg p-4 text-center">
@@ -159,7 +150,6 @@ export default function CoinPage() {
           </div>
         )}
 
-        {/* Consensus Signal */}
         {consensus && (
           <div className={`p-6 rounded-lg mb-6 ${
             consensus.action === 'BUY' ? 'bg-green-900/30 border-l-4 border-green-500' :
@@ -198,9 +188,7 @@ export default function CoinPage() {
           </div>
         )}
 
-        {/* Strategy Breakdown */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          {/* BUY Strategies */}
           <div className="bg-green-900/20 border border-green-500 rounded-lg p-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-green-400">BUY Signals</h3>
@@ -220,7 +208,6 @@ export default function CoinPage() {
             </div>
           </div>
 
-          {/* SELL Strategies */}
           <div className="bg-red-900/20 border border-red-500 rounded-lg p-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-red-400">SELL Signals</h3>
@@ -240,7 +227,6 @@ export default function CoinPage() {
             </div>
           </div>
 
-          {/* HOLD Strategies */}
           <div className="bg-yellow-900/20 border border-yellow-500 rounded-lg p-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-yellow-400">HOLD Signals</h3>
@@ -261,7 +247,6 @@ export default function CoinPage() {
           </div>
         </div>
 
-        {/* Trading Recommendations */}
         <div className="bg-gray-800 rounded-lg p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">Trading Recommendations</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
