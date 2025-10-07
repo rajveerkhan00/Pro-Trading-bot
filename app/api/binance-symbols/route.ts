@@ -1,6 +1,8 @@
+
+
 import { NextResponse } from 'next/server';
 
-// ✅ Define the expected shape of a Binance symbol
+// ✅ Define type to avoid `any`
 interface BinanceSymbol {
   symbol: string;
   status: string;
@@ -9,21 +11,22 @@ interface BinanceSymbol {
 
 export async function GET() {
   try {
-    // ✅ Remove trailing space in URL (critical fix!)
+    // ✅ NO TRAILING SPACE after 'exchangeInfo'
     const res = await fetch('https://api.binance.com/api/v3/exchangeInfo', {
-      next: { revalidate: 300 }, // cache for 5 minutes
+      next: { revalidate: 300 },
     });
+
     if (!res.ok) {
-      throw new Error('Failed to fetch exchange info');
+      throw new Error(`Binance API responded with status ${res.status}`);
     }
+
     const data = await res.json();
 
-    // ✅ Use proper type instead of `any`
     const usdtSymbols = (data.symbols as BinanceSymbol[])
       .filter(s => 
         s.status === 'TRADING' && 
         s.quoteAsset === 'USDT' &&
-        !s.symbol.includes('_') // exclude leveraged tokens
+        !s.symbol.includes('_')
       )
       .map(s => s.symbol)
       .sort()
@@ -31,9 +34,9 @@ export async function GET() {
 
     return NextResponse.json(usdtSymbols);
   } catch (error) {
-    console.error('Binance symbols error:', error);
+    console.error('Binance symbols fetch error:', error);
     return NextResponse.json(
-      { error: 'Failed to load symbols' },
+      { error: 'Failed to load trading pairs' },
       { status: 500 }
     );
   }
