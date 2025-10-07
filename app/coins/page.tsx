@@ -6,11 +6,35 @@ import { TradingStrategies } from '@/types/index';
 
 const fetcher = (url: string) => fetch(url).then(res => res.json());
 
+// Define precise types
+interface PriceData {
+  current: number;
+  change: number;
+  high: number;
+  low: number;
+  volume: number;
+}
+
+interface ConsensusSignal {
+  action: 'BUY' | 'SELL' | 'HOLD';
+  confidence: number;
+  duration: string;
+  leverage: number;
+  reason: string;
+  stopLoss?: number;
+  takeProfit?: number;
+}
+
+interface Signal {
+  action: 'BUY' | 'SELL' | 'HOLD';
+  confidence: number;
+}
+
 interface CoinDetails {
   symbol: string;
-  signals: any[];
-  consensus: any;
-  priceData: any;
+  signals: Signal[];
+  consensus: ConsensusSignal;
+  priceData: PriceData;
   strategyStats: {
     buy: { count: number; strategies: string[] };
     sell: { count: number; strategies: string[] };
@@ -26,7 +50,7 @@ interface PriceUpdate {
 }
 
 interface SignalResult {
-  action: string;
+  action: 'BUY' | 'SELL' | 'HOLD';
   confidence: number;
 }
 
@@ -86,7 +110,12 @@ export default function CoinsPage() {
         return;
       }
 
-      const data: any[] = await response.json();
+      const data: Array<{
+        symbol: string;
+        lastPrice: string;
+        priceChangePercent: string;
+      }> = await response.json();
+
       const validPrices: PriceUpdate[] = data
         .filter(item => item && typeof item.lastPrice === 'string')
         .map(item => ({
@@ -159,7 +188,7 @@ export default function CoinsPage() {
         };
       });
     }
-  }, [realTimePrices, selectedCoin?.symbol]);
+  }, [realTimePrices, selectedCoin?.symbol, selectedCoin]); // ✅ Added `selectedCoin` to deps
 
   useEffect(() => {
     if (!symbols || paginatedCoins.length === 0) return;
@@ -338,7 +367,7 @@ export default function CoinsPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <span className="text-blue-400">Search results for:</span>
-                <span className="font-semibold text-white">"{searchQuery}"</span>
+                <span className="font-semibold text-white">{`"${searchQuery}"`}</span> {/* ✅ Escaped quotes */}
                 <span className="text-gray-400">({filteredCoins.length} coins found)</span>
               </div>
               <button

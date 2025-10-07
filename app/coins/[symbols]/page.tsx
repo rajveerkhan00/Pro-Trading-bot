@@ -5,14 +5,37 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { TradingStrategies } from '@/types/index';
 
+// Define types
+interface PriceData {
+  current: number;
+  change: number;
+  high: number;
+  low: number;
+}
+
+interface Signal {
+  action: 'BUY' | 'SELL' | 'HOLD';
+  confidence: number;
+}
+
+interface ConsensusSignal {
+  action: 'BUY' | 'SELL' | 'HOLD';
+  confidence: number;
+  duration: string;
+  leverage: number;
+  reason: string;
+  stopLoss?: number;
+  takeProfit?: number;
+}
+
 export default function CoinPage() {
   const params = useParams();
   const symbol = params.symbol as string;
-  
+
   const [isLoading, setIsLoading] = useState(true);
-  const [signals, setSignals] = useState<any[]>([]);
-  const [consensus, setConsensus] = useState<any>(null);
-  const [priceData, setPriceData] = useState<any>(null);
+  const [signals, setSignals] = useState<Signal[]>([]);
+  const [consensus, setConsensus] = useState<ConsensusSignal | null>(null);
+  const [priceData, setPriceData] = useState<PriceData | null>(null);
 
   useEffect(() => {
     const init = async () => {
@@ -44,7 +67,6 @@ export default function CoinPage() {
 
         setSignals(allSignals);
         setConsensus(consensusSignal);
-
       } catch (err) {
         console.error('Failed to load coin data:', err);
       } finally {
@@ -70,10 +92,11 @@ export default function CoinPage() {
   const sellStrategies = signals.filter(s => s.action === 'SELL');
   const holdStrategies = signals.filter(s => s.action === 'HOLD');
 
-  const getActionLevel = (buyCount: number, sellCount: number, holdCount: number) => {
+  // Removed unused `holdCount`
+  const getActionLevel = (buyCount: number, sellCount: number) => {
     const totalActive = buyCount + sellCount;
     if (totalActive === 0) return 'HOLD';
-    
+
     const buyRatio = buyCount / totalActive;
     const sellRatio = sellCount / totalActive;
 
@@ -84,7 +107,7 @@ export default function CoinPage() {
     return 'HOLD';
   };
 
-  const actionLevel = getActionLevel(buyStrategies.length, sellStrategies.length, holdStrategies.length);
+  const actionLevel = getActionLevel(buyStrategies.length, sellStrategies.length);
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
