@@ -8,28 +8,23 @@ interface BinanceSymbol {
 
 export async function GET() {
   try {
-    const binanceUrl = 'https://api.binance.com/api/v3/exchangeInfo';
-    
-    console.log('Fetching from Binance API...');
-    const res = await fetch(binanceUrl, {
-      next: { revalidate: 300 },
+    const res = await fetch('https://api.binance.com/api/v3/exchangeInfo', {
+      next: { revalidate: 300 }, // 5 minutes cache
+      headers: {
+        'User-Agent': 'YourApp/1.0.0',
+        'Accept': 'application/json',
+      },
     });
 
-    console.log(`Binance API status: ${res.status}`);
-    
     if (!res.ok) {
-      // Get more details about the failure
-      const errorText = await res.text();
-      console.error('Binance API error response:', errorText);
-      throw new Error(`Binance API failed: ${res.status} - ${errorText}`);
+      // Handle specific Binance rate limiting
+      if (res.status === 418 || res.status === 429) {
+        throw new Error(`Binance rate limit exceeded. Please try again later.`);
+      }
+      throw new Error(`Binance API responded with status ${res.status}`);
     }
 
     const data = await res.json();
-    console.log(`Received ${data.symbols?.length || 0} symbols`);
-
-    if (!data.symbols || !Array.isArray(data.symbols)) {
-      throw new Error('Invalid response format from Binance API');
-    }
 
     const usdtSymbols = (data.symbols as BinanceSymbol[])
       .filter(s => 
@@ -41,22 +36,11 @@ export async function GET() {
       .sort()
       .slice(0, 850);
 
-    console.log(`Filtered to ${usdtSymbols.length} USDT pairs`);
-    
     return NextResponse.json(usdtSymbols);
-    
   } catch (error) {
-    console.error('Detailed Binance symbols fetch error:', {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-      name: error instanceof Error ? error.name : 'Unknown'
-    });
-    
+    console.error('Binance symbols fetch error:', error);
     return NextResponse.json(
-      { 
-        error: 'Failed to load trading pairs',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
+      { error: 'Failed to load trading pairs' },
       { status: 500 }
     );
   }
